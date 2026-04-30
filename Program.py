@@ -19,7 +19,7 @@ st.markdown("""
 .footer { text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f1f1f1; border-radius: 10px; }
 </style>
 <div class="main-header"><h1>🚗 Automatic Number Plate Detection System</h1><p>AI-powered vehicle number plate recognition</p></div>
-<div class="college-info"><h3>📚 Dept. of Computer Science and Application</h3><h4>🏛️ Govt. First Grade College for Women, Jamkhandi</h4><p>Project by: [Your Name] | Guided by: [Guide Name]</p></div>
+<div class="college-info"><h3>📚 Dept. of Computer Science and Application</h3><h4>🏛️ Govt. First Grade College for Women, Jamkhandi</h4><p>Project by: [Boramma Surapur] | Guided by: [S.P.Sajjan]</p></div>
 """, unsafe_allow_html=True)
 
 # ----------------- TESSERACT PATH (CHANGE IF NEEDED) -----------------
