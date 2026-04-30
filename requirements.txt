@@ -1,9 +1,6 @@
 streamlit
+opencv-python-headless
 numpy
-cv2
-PIL
+pillow
 pytesseract
-re
-os
-time
-io
+rich
