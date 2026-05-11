@@ -7,6 +7,7 @@ import re
 import os
 import time
 from io import BytesIO
+import pandas as pd
 
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(page_title="Number Plate Detection", page_icon="🚗", layout="wide")
@@ -18,16 +19,15 @@ st.markdown("""
 .college-info { background-color: #f8f9fa; padding: 1rem; border-radius: 10px; border-left: 5px solid #4CAF50; margin-bottom: 1rem; }
 .footer { text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f1f1f1; border-radius: 10px; }
 </style>
-<div class="main-header"><h1>🚗 Automatic Number Plate Detection System</h1><p>AI-powered vehicle number plate recognition</p></div>
-<div class="college-info"><h3>📚 Dept. of Computer Science and Application</h3><h4>🏛️ Govt. First Grade College for Women, Jamkhandi</h4><p>Project by: [Boramma] | Guided by: [S P Sajjan]</p></div>
+<div class="main-header"><h1>🚗 Automatic Number Plate Detection System</h1><p>AI-powered vehicle number plate recognition + Fake/Genuine Check</p></div>
+<div class="college-info"><h3>📚 Dept. of Computer Science and Application</h3><h4>🏛️ Govt. First Grade College for Women, Jamkhandi</h4><p>Project by: [Your Name] | Guided by: [Guide Name]</p></div>
 """, unsafe_allow_html=True)
 
 # ----------------- TESSERACT PATH (auto-detect) -----------------
-# Try common installation paths
 possible_paths = [
-    "/usr/bin/tesseract",           # Linux (Streamlit Cloud / Ubuntu)
-    "/usr/local/bin/tesseract",     # macOS (Homebrew)
-    "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",  # Windows
+    "/usr/bin/tesseract",
+    "/usr/local/bin/tesseract",
+    "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
 ]
 tesseract_found = False
 for path in possible_paths:
@@ -54,6 +54,19 @@ if st.sidebar.button("🔧 Test Tesseract"):
         st.sidebar.success(f"Version: {pytesseract.get_tesseract_version()}")
     except Exception as e:
         st.sidebar.error(f"Tesseract error: {e}")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📋 Genuine Numbers Database")
+uploaded_csv = st.sidebar.file_uploader("Upload CSV (one number per row)", type=['csv'])
+if uploaded_csv is not None:
+    df = pd.read_csv(uploaded_csv)
+    numbers = df.iloc[:,0].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True).tolist()
+    st.session_state['genuine_numbers'] = numbers
+    st.sidebar.success(f"Loaded {len(numbers)} genuine numbers")
+else:
+    if 'genuine_numbers' not in st.session_state:
+        st.session_state['genuine_numbers'] = ['KA01AB1234', 'MH02CD5678', 'DL03EF9012']
+    st.sidebar.info("Using default sample list. Upload CSV to replace.")
 
 st.sidebar.markdown("---")
 st.sidebar.info("💡 Auto detection works best on front/rear vehicle images with good contrast.")
@@ -215,7 +228,7 @@ if uploaded_file is not None:
     st.subheader("📷 Uploaded Image")
     st.image(pil_img, width=600)
 
-    # Auto detection
+    # Auto detection button
     if st.button("🔍 Auto Detect Number Plate", type="primary"):
         with st.spinner("Detecting..."):
             plate_crop, annotated = detect_plate_auto(img_cv.copy())
@@ -230,7 +243,7 @@ if uploaded_file is not None:
             st.session_state['guess_rect'] = guess_rect
 
     st.markdown("---")
-    # Manual crop
+    # Manual crop option (always visible)
     rect_guess = st.session_state.get('guess_rect', None)
     manual_crop, preview = manual_crop_sliders(img_cv, default_rect=rect_guess)
     if manual_crop is not None:
@@ -238,7 +251,7 @@ if uploaded_file is not None:
         st.session_state['annotated'] = preview
         st.success("Manual region saved!")
 
-    # Show results
+    # Show results if a crop exists
     if 'plate_crop' in st.session_state:
         plate = st.session_state['plate_crop']
         annotated = st.session_state['annotated']
@@ -250,7 +263,7 @@ if uploaded_file is not None:
             st.image(annotated_rgb, width=600)
             buf = BytesIO()
             Image.fromarray(annotated_rgb).save(buf, format="PNG")
-            st.download_button("📸 Download", data=buf.getvalue(), file_name="annotated.png")
+            st.download_button("📸 Download Annotated", data=buf.getvalue(), file_name="annotated.png")
 
         with tab2:
             st.image(cv2.cvtColor(plate, cv2.COLOR_BGR2RGB), width=400)
@@ -268,11 +281,21 @@ if uploaded_file is not None:
             else: col2.error("Low")
 
             if ocr_text and conf > 20:
-                st.success(f"**Detected:** `{ocr_text}`")
+                st.success(f"**Detected Number:** `{ocr_text}`")
+                
+                # ----- FAKE / GENUINE CHECK -----
+                genuine_numbers = st.session_state.get('genuine_numbers', [])
+                if ocr_text in genuine_numbers:
+                    st.balloons()
+                    st.success("✅ **GENUINE NUMBER** - This vehicle is registered.")
+                else:
+                    st.error("❌ **FAKE NUMBER** - This number is not in the database.")
+                
                 st.session_state.history.append({
                     "time": time.strftime("%H:%M:%S"),
                     "plate": ocr_text,
-                    "conf": conf
+                    "conf": conf,
+                    "status": "Genuine" if ocr_text in genuine_numbers else "Fake"
                 })
                 st.download_button("📄 Download Number", data=ocr_text.encode(), file_name="plate.txt")
             else:
@@ -283,12 +306,18 @@ if uploaded_file is not None:
                     if manual_num:
                         clean = re.sub(r'[^A-Z0-9]', '', manual_num.upper())
                         st.success(f"Saved: {clean}")
+                        genuine_numbers = st.session_state.get('genuine_numbers', [])
+                        if clean in genuine_numbers:
+                            st.success("✅ GENUINE NUMBER")
+                        else:
+                            st.error("❌ FAKE NUMBER")
                         st.session_state.history.append({
                             "time": time.strftime("%H:%M:%S"),
                             "plate": clean,
-                            "conf": 100
+                            "conf": 100,
+                            "status": "Genuine" if clean in genuine_numbers else "Fake"
                         })
-                with st.expander("🔍 Show preprocessed image"):
+                with st.expander("🔍 Show what Tesseract saw"):
                     if len(plate.shape)==3:
                         gray = cv2.cvtColor(plate, cv2.COLOR_BGR2GRAY)
                     else:
@@ -296,7 +325,7 @@ if uploaded_file is not None:
                     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
                     st.image(thresh, width=400)
 
-    # Clear crop
+    # Clear crop button
     if st.button("🗑️ Clear & Start Over"):
         for k in ['plate_crop', 'annotated', 'guess_rect']:
             if k in st.session_state: del st.session_state[k]
@@ -307,16 +336,17 @@ else:
 
 # ----------------- HISTORY SIDEBAR -----------------
 st.sidebar.markdown("---")
-st.sidebar.subheader("📜 Recent")
+st.sidebar.subheader("📜 Recent Detections")
 if st.sidebar.button("Clear History"):
     st.session_state.history = []
 for entry in reversed(st.session_state.history[-5:]):
-    st.sidebar.write(f"`{entry['plate']}` ({entry['conf']:.0f}%) at {entry['time']}")
+    status_emoji = "✅" if entry.get('status') == 'Genuine' else "❌"
+    st.sidebar.write(f"`{entry['plate']}` {status_emoji} ({entry['conf']:.0f}%) at {entry['time']}")
 
 # ----------------- FOOTER -----------------
 st.markdown("""
 <div class="footer">
-    <p>Developed with ❤️ using Streamlit, OpenCV, Tesseract</p>
+    <p>Developed with ❤️ using Streamlit, OpenCV, Tesseract | Fake/Genuine Check</p>
     <p>© 2025 Dept. of CS & Application, Govt. First Grade College for Women, Jamkhandi</p>
 </div>
 """, unsafe_allow_html=True)
